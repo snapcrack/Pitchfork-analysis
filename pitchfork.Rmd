@@ -1,0 +1,417 @@
+---
+title: "Analysis of Pitchfork Music Reviews"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(ggplot2)
+library(dplyr)
+library(GGally)
+library(proto)
+library(tidyr)
+library(sqldf)
+library(lattice)
+library(MASS)
+
+```
+
+# Introduction
+
+Hello! Welcome to an analysis of 18 years of everyone's favorite polysyllable-loving music website, pitchfork.com. We take it for granted now, but Pitchfork did more than anyone to fuse the beanie with the verbose, once the living holy text of mid-aughts hipsters. (And we don't even use that word anymore! Now it's just 'gentrifier'.) This data was generously uploaded by Nolan Conway at Kaggle and can be found at https://www.kaggle.com/nolanbconaway/pitchfork-data. Nolan uploaded the data in a sqlite database; for this project, I parsed the tables into CSVs and merged the relevant ones into a single dataframe. 
+
+There's a lot to explore here. Have album scores changed overtime? Do the sages of Pitchfork betray preferences for different genres, artists or labels? Do different classes of writers dole out differnet judgment? And perhaps most interesting, are score ranges associated with different language in the reviews? With more than 18,000 rows in this dataset, we'll soon find out!
+
+A note on the data: First, some of this was processed in Python, which I think is far more functional for splitting strings, getting word counts, natural language processing, and so on. The new columns in this dataset that are not in the original SQLite file are one for the split review contents, one for a counter of each word used in those reviews, and one for the length of each review. Second, the fact that this was originally stored in a SQLite file meant that when the tables were merged into the dataframe, there was a fair number of duplicate rows, as a new row was created if an album had more than one label or genre. That sometimes resulted in single albums containing dozens of rows. (Radiohead's 'In Rainbows' had 32 fucking rows.) Thus, there could be a slight loss of resolution when analyses include genres or labels.
+
+With that said, let's wind our way through this thing.
+
+```{r}
+reviews <- read.csv('reviewspandas2.csv', strip.white=TRUE)
+
+#content <- read.csv('content.csv')
+#genres <- read.csv('genres.csv')
+#labels <- read.csv('labels.csv')
+
+#reviews <- merge(reviews, content)
+#reviews <- merge(reviews, genres)
+#reviews <- merge(reviews, labels)
+
+```
+
+```{R}
+
+#write.csv(reviews, file = 'reviewsnew.csv')
+
+```
+
+
+#Summary statistics
+
+Here's a bird's-eye view of our dataset:
+
+```{r}
+str(reviews)
+```
+
+This is a reasonably large dataframe. It has 16 #CORRECT THIS rows, and many of the rows have hundreds or thousands of unique values. We'll take summary values of everything but the 'content' column, which gives us very large, very unquantitative criticism.
+
+```{r, echo = false}
+summary(reviewsunique[,2:12, 14:15]) ###FIX THIS
+```
+
+Already, some points arise:
+
+Compliations abound, with "Various Artists" having 687 albums. The single most reviewed group/artist is Guided By Voices---I don't even know what that is.
+
+An album's inclusion in Pitchfork's annual end-of-year Best New Music is indicated by a 1, rather than by the ranking in the BNM list.
+
+All the top publishing days for the website in the summary function come up from the early years of Pitchfork, which was founded in January 1999.
+
+There are individual writers who have contributed hundreds and hundreds of reviews.
+
+The DJ Kicks mixtapes are the most reviewed series of album.
+
+Too many artists make album series titled with Roman numerals.
+
+Of Monteal has 20 reviews which seems insane to me.
+
+
+
+
+
+
+
+Let's take a look at how the scores fall:
+
+```{r}
+
+qplot(x = reviews$score, xlab = 'Score', ylab = 'Count', binwidth = .1, 
+fill = I('orange'), color = I('black'))
+
+?qplot
+
+```
+
+
+
+```{r}
+summary(reviews$score)
+```
+
+Pitchfork, it seems, grades on a curve---if you release an album, you're likely to get something near a C.  
+
+##How do you get an A?
+
+The fun of the dataset is how many angles it provides to look at scores. Let's start by taking a look at genres.
+
+
+
+
+```{r}
+ggplot(aes(x = genre, y = score, group = 1), data = subset(reviewsunique, genre != '')) +
+  geom_jitter(alpha = 1/10) +
+  geom_smooth(stat = 'summary', fun.y = 'median', show.legend = TRUE)
+```
+
+```{r}
+genrescores <- group_by(reviews, genre)
+
+summarize(genrescores,
+          median_scores = median(score),
+          mean_scores = mean(score))
+```
+
+Even with a MORE HERE
+
+Relevant: not really.
+
+
+```{r}
+ggplot(aes(x = pub_year, y = score, color = author_type), data = subset(reviews, author_type != '')) +
+  geom_jitter(alpha = 1/5) +
+  geom_smooth(stat = 'summary', fun.y = 'median')
+```
+
+This is a pretty but unintelligible graph---the only thing that comes through the noise is how much Pitchfork relies on freelancers. Let's look only at each individual category.
+
+
+```{r}
+
+ggplot(aes(x = pub_year, y = score, color = author_type), data = subset(reviews, author_type != '')) +
+  geom_smooth(stat = 'summary', fun.y = 'median') +
+  scale_x_continuous()
+
+authorplot+
+  scale_color_hue(l=40, c=200) +
+  geom_point(aes(size= count))
+  
+```
+
+Similarly, the problem here with this graph is that Pitchfork's masthead, like that of every other publication, is so  clogged with honorifics and petty distinctions that RStudio practically runs out of space on the color spectrum to represent every editorial role.
+
+A cursory view makes the associate reviews editor ca. 2016 look far more generous than th editor-in-chief ca. 2000. The problem, however, is that this graph doesn't really incorporate the sense of scale of author type while reminaing readable. We can do that as such:
+
+```{r}
+
+writer_types <- read.csv('writer_types.csv') ##dataframe separately created in pandas
+
+ggplot(aes(x = pub_year, y = mean_score, color = author_type), 
+       data = subset(writer_types, author_type != '')) +
+  ylab('Mean Score') +
+  xlab('Publication Year') +
+  geom_line()+
+  geom_point(aes(size = count), data=subset(writer_types, author_type != '')) +
+  scale_size(breaks = c(1, 10, 50, 100, 200), labels = c('1-9', '10-49', '50-99', '100-199', '200-' ))
+
+?scale_size_continuous
+
+```
+
+It's not reasonable to compare the average scores of anyone but contributors, and their average scores never fall beyond even a single standard deviation from the mean of 7 because their sample size is so large every year. Conversely, staffers are all over the place. Let's take a look at just the top few rows based on frequency:
+
+```{r}
+head(subset(writer_types, author_type != ''), 10)
+```
+
+In many cases, author types have but a single data point for every year. So while there may be a correlation between author type and review scores, it's not one that we can identify here and put in our model.
+
+Relevant: maybe, but effectively no
+
+```{r}
+qplot(x = reviews$author)
+
+sd(reviews$score)
+
+```
+
+##Frequency
+
+Are you ready to watch the holy harmony of the cosmos manifest? You should be!
+
+This is the total number of articles written by the top 20 percent of writers:
+```{r}
+topwriters <- table(realpeople$author) 
+
+# create a dataframe from the table:
+table.df <- as.data.frame(topwriters)
+
+# rename the columns, so that it can be merged on the common column
+colnames(table.df) <- c("author","Freq")
+
+# merge on the common column:
+writers <- merge(writers, table.df, all = TRUE, by = c('author'))
+
+
+##looking for pareto-type phenomena
+frequentwriters <- subset(writers, Freq >= quantile(Freq, .8))
+
+sum(frequentwriters$Freq)
+
+frequentwriters
+
+
+```
+
+So the top 20 percent of writers (i.e., those who were in the 80th percentile of number of articles written) wrote 14,872 articles. How much of the total output is that?
+
+```{r}
+##looking for pareto-type phenomena
+frequentwriters <- subset(writers, Freq >= quantile(Freq, .9))
+
+(sum(frequentwriters$Freq)/count(reviews))
+
+frequentwriters
+
+```
+
+Almost exactly 80 percent! It's the Pareto Principle before our eyes. Now, what follows is the average score of every writer as a function of number of articles written---in other words, a single point is a single writer, their positions along the x-axis are determined by the number of articles they wrote, and their positions on the y-axis by the average score they gave to albums.
+
+```{r}
+
+reviews$article_sum <- summary(reviews$author)
+
+realpeople <- subset(reviews, author != '')
+topwriters <- table(realpeople$author) 
+topwriters <- head(sort(topwriters, decreasing = TRUE))
+
+topwriters
+
+?aggregate
+
+
+writers <- aggregate(score ~ author, realpeople, mean)
+
+writers <- update(writers, ~ . + author, table(writers$author))
+
+writers
+
+
+```
+
+
+
+```{r}
+ggplot(aes(x = Freq, y  = score), 
+       data = subset(writers, Freq < quantile(writers$Freq, .95))) +
+  geom_point(alpha = 1/5, color = 'blue')
+```
+
+See how quickly the scores regress to the mean? It's the Central Limit Theorem! Recall that the CLT states that over sufficient time, a sample of averages of a data set of any shape will ultimately plot along a normal distribution. This looks pretty normal to me! (Note: this chart excluded the top 5 percent of writers for the sake of scale, but they also fall into the long center of the mean.)
+
+This raises an interesting question for creating a linear model. The more  
+
+```{r}
+cor.test(writers$score, writers$Freq)
+```
+
+'''stuff here about how this is turning out to be a frequentist's delight. do correlation test for scores under and above the mean and for frequencies below 35 or 40
+
+```{r}
+
+
+ggplot(aes(x = pub_date, y = score), 
+       data = subset(reviews, author == 'amanda petrusich')) + 
+  geom_point(alpha = 1/5) +
+  geom_smooth(stat = 'smooth', fun.y = 'mean')
+
+?geom_smooth
+```
+
+
+
+
+Relevant: 
+
+```{r}
+ggplot(aes(x = pub_year, y = score)), data = reviews) +
+  geom_jitter(alpha = 1/10) +
+  geom_smooth(stat = 'summary', fun.y = 'median')
+
+quick <- subset(reviews, genre == 'rock')
+qplot(x= quick$pub_year, y = quick$genre)
+
+```
+
+```{r}
+ggplot(aes(x = pub_date, y = score, label = title), data = subset(reviews, artist == 'radiohead')) +
+  geom_point() +
+  geom_text()
+
+?geom_text
+```
+
+##Review Length
+
+Could longer reviews be associated with different types of scores? Looking at the stats for length, we get:
+
+```{r}
+summary(reviews$length)
+```
+
+First, let's indulge ourselves and figure out which album was critiqued for 3700 god damn words.
+
+```{r}
+subset(reviews, length == 3688)
+```
+
+Actually that makes sense given the posthumous date and now I feel bad for swearing. Anyway, let's chart our data and see what happens.
+
+
+```{r}
+ggplot(aes(x = length, y = score), data = reviews) + 
+  geom_point(alpha = 1/15, color = 'blue')+
+  scale_y_continuous('Score')+
+  scale_x_continuous('Review Word Count')
+
+
+```
+
+Of course, we don't have to add any single additional statistical layer to this graph or run a single statistical test to instantly see that longer reviews get better scores---we have a nice, logarithmic relationship. But just to perform our due diligence, let's do it anwyay. Here's the same graph overlaid with a line for median:
+
+```{r}
+ggplot(aes(x = length, y = score), data = reviews) + 
+  geom_point(alpha = 1/15, color = 'blue')+
+  scale_y_continuous('Score')+
+  scale_x_continuous('Review Word Count')+
+  geom_smooth(stat = 'smooth', color = 'Red')
+```
+
+
+Here are some descriptive stats on the top 20 percent and bottom 20 percent of review scores, respectively:
+
+```{r}
+goodreviews  <- subset(reviews, score >= quantile(score, .80))
+
+head(nicefolk, 10)
+?print
+
+
+summary(goodreviews$length)
+```
+
+```{r}
+badreviews <- subset(reviews, score <= quantile(score, .20))
+                          
+summary(badreviews$length)
+```
+
+As we can see, the differences are substantial. If we run a test for correlation on the two variables, we get:
+
+```{r}
+
+logscores <- log10(reviews$score)
+
+
+cor.test(reviews$length, reviews$score)
+```
+
+In other words, we're dealing with infintesimal probabilities that this relationship is random. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet's debut album, which Pitchfork treated with a 0-point review and a nothing more than a .gif of a chimpanzee pissing into its own mouth.
+
+`subset(reviews, score == 0 & length == 0)`
+
+```{r, echo = TRUE}
+
+subset(reviews, score == 0 & length == 0)
+
+```
+
+LOL
+
+##Time of Review
+
+```{r}
+
+ggplot(aes(x = pub_month, y = score), 
+       data = subset(reviews, author == 'adam moerder')) + 
+  geom_point(alpha = 1/5) +
+  geom_smooth(stat = 'smooth', fun.y = 'median')
+```
+
+
+```{r}
+ggplot(aes(x = pub_month, y = score), data = reviews) +
+  geom_point(alpha = 1/5, color = 'orange')+
+  geom_smooth(stat = 'summary', fun.y = 'median', color = 'green')
+```
+```{r}
+ggplot(aes(x = pub_day, y = score), data = reviews) +
+  geom_point(alpha = 1/5, color = 'maroon')+
+  geom_smooth(stat = 'summary', fun.y = 'mean')
+```
+
+```{r}
+ggplot(aes(x = pub_year, y = score), data = reviews) +
+  geom_point(alpha = 1/5, color = 'brown')+
+  geom_smooth(stat ='summary', fun.y = 'mean', color = 'purple')
+```
+
+
+```{r}
+###LINEAR MODEL PLAYGROUND
+```
+
+```{r}
+subset(reviews, score == 10)
+```
+
