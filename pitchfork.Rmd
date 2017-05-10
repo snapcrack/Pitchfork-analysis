@@ -366,7 +366,7 @@ logscores <- log10(reviews$score)
 cor.test(reviews$length, reviews$score)
 ```
 
-In other words, we're dealing with infintesimal probabilities that this relationship is random. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet's debut album, which Pitchfork treated with a 0-point review and a nothing more than a .gif of a chimpanzee pissing into its own mouth.
+In other words, we're dealing with infintesimal probabilities that this relationship is random. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet, which Pitchfork treated with a 0-point review and a nothing more than a .gif of a chimpanzee pissing into its own mouth.
 
 `subset(reviews, score == 0 & length == 0)`
 
@@ -408,10 +408,49 @@ ggplot(aes(x = pub_year, y = score), data = reviews) +
 
 
 ```{r}
-###LINEAR MODEL PLAYGROUND
+###LINEAR MODEL PLAYGROUND ## AND OTHER TESTS
 ```
 
 ```{r}
 subset(reviews, score == 10)
+```
+
+```{r}
+
+bestmusic <- subset(reviews, best_new_music == 1)
+
+qplot(x = bestmusic$score)
+
+cor.test(reviews$score, reviews$best_new_music)
+```
+
+
+```{r}
+ggplot(aes(y = score, x = length, color = best_new_music), data = reviews) +
+  geom_point(alpha = 1/5)+
+  facet_wrap( ~best_new_music)
+
+subset(bestmusic, score < 6)
+```
+
+FURTHER QUESTIONS: DO BANDS' SCORES GET BETTER OR WORSE OVER TIME?
+
+```{r}
+artistnames <- table(reviews$artist)
+
+artistnames
+
+artistnames.df <- as.data.frame(artistnames)
+
+
+colnames(artistnames.df) <- c("artist","albums")
+
+subset(artistnames.df, albums > 20)
+
+ggplot(aes(y = score, x = pub_date, color = artist),
+       data = subset(reviews, artistnames.df$albums > 20)) +
+  geom_point(alpha = 1/5) +
+  geom_line()
+
 ```
 
