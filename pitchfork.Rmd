@@ -13,6 +13,7 @@ library(tidyr)
 library(sqldf)
 library(lattice)
 library(MASS)
+library(gridExtra)
 
 ```
 
@@ -141,10 +142,6 @@ This is a pretty but unintelligible graph---the only thing that comes through th
 ggplot(aes(x = pub_year, y = score, color = author_type), data = subset(reviews, author_type != '')) +
   geom_smooth(stat = 'summary', fun.y = 'median') +
   scale_x_continuous()
-
-authorplot+
-  scale_color_hue(l=40, c=200) +
-  geom_point(aes(size= count))
   
 ```
 
@@ -164,7 +161,6 @@ ggplot(aes(x = pub_year, y = mean_score, color = author_type),
   geom_point(aes(size = count), data=subset(writer_types, author_type != '')) +
   scale_size(breaks = c(1, 10, 50, 100, 200), labels = c('1-9', '10-49', '50-99', '100-199', '200-' ))
 
-?scale_size_continuous
 
 ```
 
@@ -200,28 +196,30 @@ table.df <- as.data.frame(topwriters)
 colnames(table.df) <- c("author","Freq")
 
 # merge on the common column:
+realpeople <- subset(reviews, author != '')
+writers <- aggregate(score ~ author, realpeople, mean)
 writers <- merge(writers, table.df, all = TRUE, by = c('author'))
 
+#deleting duplicate columns
+writers$Freq.x <- NULL
+writers$Freq.y <- NULL
 
 ##looking for pareto-type phenomena
 frequentwriters <- subset(writers, Freq >= quantile(Freq, .8))
 
 sum(frequentwriters$Freq)
 
-frequentwriters
-
+writers
 
 ```
 
 So the top 20 percent of writers (i.e., those who were in the 80th percentile of number of articles written) wrote 14,872 articles. How much of the total output is that?
 
 ```{r}
-##looking for pareto-type phenomena
-frequentwriters <- subset(writers, Freq >= quantile(Freq, .9))
+##function to find percentage in top 80 percent
 
 (sum(frequentwriters$Freq)/count(reviews))
 
-frequentwriters
 
 ```
 
@@ -229,16 +227,9 @@ Almost exactly 80 percent! It's the Pareto Principle before our eyes. Now, what 
 
 ```{r}
 
-reviews$article_sum <- summary(reviews$author)
+#scrap code that i should delete
 
 realpeople <- subset(reviews, author != '')
-topwriters <- table(realpeople$author) 
-topwriters <- head(sort(topwriters, decreasing = TRUE))
-
-topwriters
-
-?aggregate
-
 
 writers <- aggregate(score ~ author, realpeople, mean)
 
@@ -253,7 +244,7 @@ writers
 
 ```{r}
 ggplot(aes(x = Freq, y  = score), 
-       data = subset(writers, Freq < quantile(writers$Freq, .95))) +
+       data = subset(writers, Freq < quantile(writers$Freq, .9))) +
   geom_point(alpha = 1/5, color = 'blue')
 ```
 
@@ -268,7 +259,7 @@ cor.test(writers$score, writers$Freq)
 '''stuff here about how this is turning out to be a frequentist's delight. do correlation test for scores under and above the mean and for frequencies below 35 or 40
 
 ```{r}
-
+#random frequent writer chosen to plot
 
 ggplot(aes(x = pub_date, y = score), 
        data = subset(reviews, author == 'amanda petrusich')) + 
@@ -282,9 +273,9 @@ ggplot(aes(x = pub_date, y = score),
 
 
 Relevant: 
-
+ 
 ```{r}
-ggplot(aes(x = pub_year, y = score)), data = reviews) +
+ggplot(aes(x = pub_year, y =score), data = reviews) +
   geom_jitter(alpha = 1/10) +
   geom_smooth(stat = 'summary', fun.y = 'median')
 
@@ -390,22 +381,28 @@ ggplot(aes(x = pub_month, y = score),
 
 
 ```{r}
-ggplot(aes(x = pub_month, y = score), data = reviews) +
+#defining variables to grid.arrange the time graphs
+
+month_graph <- ggplot(aes(x = pub_month, y = score), data = reviews) +
   geom_point(alpha = 1/5, color = 'orange')+
-  geom_smooth(stat = 'summary', fun.y = 'median', color = 'green')
-```
-```{r}
-ggplot(aes(x = pub_day, y = score), data = reviews) +
+  geom_smooth(stat = 'summary', fun.y = 'median', color = 'green')+
+  xlab('Day of Month')
+
+day_graph<- ggplot(aes(x = pub_day, y = score), data = reviews) +
   geom_point(alpha = 1/5, color = 'maroon')+
-  geom_smooth(stat = 'summary', fun.y = 'mean')
+  geom_smooth(stat = 'summary', fun.y = 'mean') +
+  xlab('Month')
+
+year_graph<- ggplot(aes(x = pub_year, y = score), data = reviews) +
+  geom_point(alpha = 1/5, color = 'pink')+
+  geom_smooth(stat ='summary', fun.y = 'mean', color = 'purple')+
+  xlab('Year')
+
+#final grid.arrange graph
+grid.arrange(day_graph, month_graph, year_graph)
 ```
 
-```{r}
-ggplot(aes(x = pub_year, y = score), data = reviews) +
-  geom_point(alpha = 1/5, color = 'brown')+
-  geom_smooth(stat ='summary', fun.y = 'mean', color = 'purple')
-```
-
+Useless. Next.
 
 ```{r}
 ###LINEAR MODEL PLAYGROUND ## AND OTHER TESTS
@@ -437,20 +434,96 @@ FURTHER QUESTIONS: DO BANDS' SCORES GET BETTER OR WORSE OVER TIME?
 
 ```{r}
 artistnames <- table(reviews$artist)
-
-artistnames
-
 artistnames.df <- as.data.frame(artistnames)
+colnames(artistnames.df) <- c("artist", "albums")
 
+reviews <- merge(artistnames.df, reviews, by='artist')
 
-colnames(artistnames.df) <- c("artist","albums")
+ggplot(aes(y = score, x = pub_date, color = artist, group = artist),
+       data = subset(reviews, albums > 12 & artist != 'various artists')) +
+  geom_point() +
+  geom_line(aes(color = artist))
 
-subset(artistnames.df, albums > 20)
-
-ggplot(aes(y = score, x = pub_date, color = artist),
-       data = subset(reviews, artistnames.df$albums > 20)) +
-  geom_point(alpha = 1/5) +
-  geom_line()
 
 ```
+
+Putting aside nonquantitative points from this graphic, like why there are more than 12 Belle and Sebastian albums in existence or what value a Pitchfork review on Gucci Mane could hold, this is  illegibile and tells us nothing. We can do a few things to fix it. First, we can manipulate our dataframe a bit so that albums are not only ordered by release date, but also by where in the artist's repertoire it came (i.e., first, third, etc.), at least according to when Pitchfork reviewed it. This will allow us to remove lots of empty space on the heat map and make it more clear.
+
+We need to take a sample of our dataset so that we end up with a small number of artists that we can see.
+
+```{r}
+
+reviews <- reviews[with(reviews, order(artist, pub_date)), ]
+
+reviews$album.number <- sequence(tabulate(reviews.album.numbers$artist))
+
+ggplot(aes(score, x = album.number, y = artist, fill = score, group = artist),
+       data = subset(reviews, albums > 11 & artist != 'various artists')) +
+  geom_tile()+
+  scale_fill_continuous(low = '#0000cc', high = '#ff0000') +
+  scale_x_continuous()
+
+rm(reviews.album.numbers)
+
+```
+
+```{r}
+ggplot(aes(score, x = album.number, y = artist, fill = score, group = artist),
+       data = subset(reviews, albums == 10 & artist != 'various artists')) +
+  geom_tile()+
+  scale_fill_continuous(low = '#0000cc', high = '#ff0000') +
+  scale_x_continuous()
+
+```
+
+
+```{r}
+
+#getting group into on albums by number of albums
+
+
+
+reviews.no.various <- subset(reviews, artist != 'various artists')
+
+reviews.no.various <- table(reviews.no.various$album.number)
+
+reviews.no.various <- as.data.frame(reviews.no.various)
+
+colnames(reviews.no.various) <- c("album.number","Freq")
+
+album.numbers.df <- group_by(reviews, album.number)
+
+album.numbers.df <- subset(album.numbers.df, artist != 'various artists')
+
+album.numbers.df <- summarize(album.numbers.df,
+                              mean.score = mean(score),
+                              median.score = median(score),
+                              std.score = sd(score))
+
+album.numbers.df <- merge(reviews.no.various, album.numbers.df)
+
+######
+
+album.numbers.mean <- ggplot(aes(x = album.number), data = album.numbers.df)+
+  geom_line(aes(y = mean.score), color = 'turquoise') +
+  xlab('Number of Albums')+
+  ylab('Mean Score')
+
+album.numbers.std <- ggplot(aes(x = album.number), data = album.numbers.df)+
+  geom_line(aes(y = std.score), color = 'purple') +
+  xlab('Number of Albums') +
+  ylab('Standard Deviation')
+
+album.numbers.freq<- ggplot(aes(x = album.number, y = Freq, group = 1), data = album.numbers.df)+
+  geom_line(aes(y = Freq), color = 'brown') +
+  xlab('Number of Albums') +
+  ylab('Frequency')
+  
+  
+grid.arrange(album.numbers.mean, album.numbers.std, album.numbers.freq)
+
+```
+
+
+
 
