@@ -14,16 +14,17 @@ library(sqldf)
 library(lattice)
 library(MASS)
 library(gridExtra)
+library(zoo)
 
 ```
 
 # Introduction
 
-Hello! Welcome to an analysis of 18 years of everyone's favorite polysyllable-loving music website, pitchfork.com. We take it for granted now, but Pitchfork did more than anyone to fuse the beanie with the verbose, once the living holy text of mid-aughts hipsters. (And we don't even use that word anymore! Now it's just 'gentrifier'.) This data was generously uploaded by Nolan Conway at Kaggle and can be found at https://www.kaggle.com/nolanbconaway/pitchfork-data. Nolan uploaded the data in a sqlite database; for this project, I parsed the tables into CSVs and merged the relevant ones into a single dataframe. 
+Hello! Welcome to an analysis of 18 years of everyone's favorite cool music website, pitchfork.com. This data was generously uploaded by Nolan Conway at Kaggle and can be found at https://www.kaggle.com/nolanbconaway/pitchfork-data. Mr. Conway uploaded the data in a sqlite database; for this project, I parsed the tables into CSVs and merged the relevant ones into a single dataframe.
 
 There's a lot to explore here. Have album scores changed overtime? Do the sages of Pitchfork betray preferences for different genres, artists or labels? Do different classes of writers dole out differnet judgment? And perhaps most interesting, are score ranges associated with different language in the reviews? With more than 18,000 rows in this dataset, we'll soon find out!
 
-A note on the data: First, some of this was processed in Python, which I think is far more functional for splitting strings, getting word counts, natural language processing, and so on. The new columns in this dataset that are not in the original SQLite file are one for the split review contents, one for a counter of each word used in those reviews, and one for the length of each review. Second, the fact that this was originally stored in a SQLite file meant that when the tables were merged into the dataframe, there was a fair number of duplicate rows, as a new row was created if an album had more than one label or genre. That sometimes resulted in single albums containing dozens of rows. (Radiohead's 'In Rainbows' had 32 fucking rows.) Thus, there could be a slight loss of resolution when analyses include genres or labels.
+A note on the data: First, some of this was processed in Python, which I think is far more functional than R for splitting strings, getting word counts, running functions in grouped dataframes, and so on. The new columns in this dataset that are not in the original SQLite file are one for the split review contents, one for a counter of each word used in those reviews, and one for the length of each review. Second, the fact that this was originally stored in a SQLite file meant that when the tables were merged into the dataframe, there was a fair number of duplicate rows, as a new row was created if an album had more than one label or genre. That sometimes resulted in single albums containing dozens of rows. (One of Radiohead's album had 32 rows lol.) Thus, there could be a slight loss of resolution when analyses include genres or labels.
 
 With that said, let's wind our way through this thing.
 
@@ -63,25 +64,19 @@ summary(reviewsunique[,2:12, 14:15]) ###FIX THIS
 
 Already, some points arise:
 
-Compliations abound, with "Various Artists" having 687 albums. The single most reviewed group/artist is Guided By Voices---I don't even know what that is.
+1. Compliations abound, with "Various Artists" having 687 albums. The single most reviewed group/artist is Guided By Voices---I don't even know what that is.
 
-An album's inclusion in Pitchfork's annual end-of-year Best New Music is indicated by a 1, rather than by the ranking in the BNM list.
+2. An album's inclusion in Pitchfork's annual end-of-year Best New Music is indicated by a 1, rather than by the ranking in the BNM list, which is too bad, but good on Mr. Conway to think of including this in the scraping.
 
-All the top publishing days for the website in the summary function come up from the early years of Pitchfork, which was founded in January 1999.
+3. All the top publishing days for the website in the summary function come up from the early years of Pitchfork, which was founded in January 1999.
 
-There are individual writers who have contributed hundreds and hundreds of reviews.
+4. There are individual writers who have contributed hundreds and hundreds of reviews.
 
-The DJ Kicks mixtapes are the most reviewed series of album.
+5. The DJ Kicks mixtapes are the most reviewed series of album.
 
-Too many artists make album series titled with Roman numerals.
+6. Too many artists make album series titled with Roman numerals.
 
-Of Monteal has 20 reviews which seems insane to me.
-
-
-
-
-
-
+7. Of Monteal has 20 reviews which seems excessive.
 
 Let's take a look at how the scores fall:
 
@@ -102,7 +97,9 @@ summary(reviews$score)
 
 Pitchfork, it seems, grades on a curve---if you release an album, you're likely to get something near a C.  
 
-##How do you get an A?
+#Breaking down scoring factors
+
+##Genre
 
 The fun of the dataset is how many angles it provides to look at scores. Let's start by taking a look at genres.
 
@@ -112,7 +109,20 @@ The fun of the dataset is how many angles it provides to look at scores. Let's s
 ```{r}
 ggplot(aes(x = genre, y = score, group = 1), data = subset(reviewsunique, genre != '')) +
   geom_jitter(alpha = 1/10) +
-  geom_smooth(stat = 'summary', fun.y = 'median', show.legend = TRUE)
+  geom_smooth(stat = 'summary', fun.y = 'median', show.legend = TRUE)+
+  xlab('Genre')+
+  ylab('Score')
+```
+There doesn't seem to be much prejudice for or against any particular genre in terms of score, although rock predominates in terms of sheer number of albums reviewed.
+
+```{r}
+ggplot(aes(x = pub_year, y =score), data = subset(reviews, genre != '')) +
+  geom_jitter(alpha = 1/10, color = 'purple') +
+  geom_smooth(stat = 'summary', fun.y = 'median')+
+  xlab('Publication Year, Rock Reviews')+
+  ylab('Score')+
+  facet_wrap(~genre)
+
 ```
 
 ```{r}
@@ -123,15 +133,69 @@ summarize(genrescores,
           mean_scores = mean(score))
 ```
 
-Even with a MORE HERE
 
-Relevant: not really.
+There's not much of a distinction here. What I AM curious to look at is how the genres of albums Pitchfork has reviewed has changed over the years. Someone recently remarked to me that Pitchfork has "a pre-woke phase and a woke phase", so I'm wondering if this bears out in the genre allotment.
 
+```{r}
+
+genre.table <- read.csv('genre_types.csv') ##table created in pandas
+
+genre.table$genre <- NULL
+genre.table$pub_year <-NULL
+  
+count(genre.table)
+
+ggplot(aes(x = pub_year.1, y = count, color = genre.1), data = subset(genre.table, genre.1 != ''))+
+  geom_point()+
+  geom_line()+
+  scale_x_continuous(limits = c(1999, 2015))+
+  xlab('Publication Year')+
+  ylab('Number of Albums')
+```
+
+A similar dynamic plays out in the Best New Music category:
+
+
+```{r}
+ggplot(aes(y = score, x = length, color = genre), data = subset(reviews, genre != ''))+
+  geom_point(alpha = 1/7)+
+  facet_wrap( ~best_new_music)+
+  xlab('Review Length, with Best New Music on right')+
+  ylab('Score')
+```
+
+
+This data doesn't include albums for which there was no genre info, and of course, overlapping genres were removed when we did the cleaning. Still, what remains is considered a very large sample of the dataset. Between this graph and the last, we can see a few things: 
+
+1. Rock predominantes, although
+2. every other genre appears to be growing vis-a-vis 2000, particularly rap and electronic.
+3. Pitchfork reviews so few jazz albums that it probably should not review jazz.
+4. Speaking of which, there's no contemporary classical (maybe it fell under 'experimental' lol).
+5. Metal should probably just be merged into the rock category, so if we mentally do that, then rock is even bigger.
+6. Pitchfork has peaked maybe?
+
+BTW, this is how Radiohead has fared over the years:
+
+
+```{r}
+ggplot(aes(x = pub_date, y = score, label = title), data = subset(reviews, artist == 'radiohead')) +
+  geom_point() +
+  geom_text() +
+  xlab('Publication Date')+
+  ylab('Score')
+
+```
+
+##Author Type
+
+We can also examine whether differnet types of writers are more exacting in their critiques. 
 
 ```{r}
 ggplot(aes(x = pub_year, y = score, color = author_type), data = subset(reviews, author_type != '')) +
   geom_jitter(alpha = 1/5) +
-  geom_smooth(stat = 'summary', fun.y = 'median')
+  geom_smooth(stat = 'summary', fun.y = 'median')+
+  xlab('Publication Year')+
+  ylab('Score')
 ```
 
 This is a pretty but unintelligible graph---the only thing that comes through the noise is how much Pitchfork relies on freelancers. Let's look only at each individual category.
@@ -145,9 +209,7 @@ ggplot(aes(x = pub_year, y = score, color = author_type), data = subset(reviews,
   
 ```
 
-Similarly, the problem here with this graph is that Pitchfork's masthead, like that of every other publication, is so  clogged with honorifics and petty distinctions that RStudio practically runs out of space on the color spectrum to represent every editorial role.
-
-A cursory view makes the associate reviews editor ca. 2016 look far more generous than th editor-in-chief ca. 2000. The problem, however, is that this graph doesn't really incorporate the sense of scale of author type while reminaing readable. We can do that as such:
+Similarly, the problem with this graph is that Pitchfork's masthead, like that of every other publication, is so clogged with honorifics and petty editorial distinctions that RStudio practically runs out of space on the color spectrum to represent every editorial role. Viewed glancingly, the graph makes the associate reviews editor ca. 2016 look far more generous than th editor-in-chief ca. 2000. The problem, however, is that this graph doesn't really incorporate the sense of scale of author type while reminaing readable. We can do that as such:
 
 ```{r}
 
@@ -170,22 +232,20 @@ It's not reasonable to compare the average scores of anyone but contributors, an
 head(subset(writer_types, author_type != ''), 10)
 ```
 
-In many cases, author types have but a single data point for every year. So while there may be a correlation between author type and review scores, it's not one that we can identify here and put in our model.
+In many cases, author types have but a single data point for every year. So while there may be a correlation between author type and review scores, it's not one that we can identify here.
 
-Relevant: maybe, but effectively no
 
-```{r}
-qplot(x = reviews$author)
-
-sd(reviews$score)
-
-```
 
 ##Frequency
 
-Are you ready to watch the holy harmony of the cosmos manifest? You should be!
+Are you ready to watch the harmony of the cosmos manifest? You should be!
 
-This is the total number of articles written by the top 20 percent of writers:
+This is a histogram of authors based on how many articles they've written:
+
+```{r}
+qplot(x = reviews$author, xlab= 'Reviewer', ylab = 'Count')
+```
+So, quite a bit of variation, with some people writing more than 800 reviews and others contributing only one. This is the total number of articles written by the top 20 percent of writers:
 ```{r}
 topwriters <- table(realpeople$author) 
 
@@ -209,8 +269,6 @@ frequentwriters <- subset(writers, Freq >= quantile(Freq, .8))
 
 sum(frequentwriters$Freq)
 
-writers
-
 ```
 
 So the top 20 percent of writers (i.e., those who were in the 80th percentile of number of articles written) wrote 14,872 articles. How much of the total output is that?
@@ -224,21 +282,6 @@ So the top 20 percent of writers (i.e., those who were in the 80th percentile of
 ```
 
 Almost exactly 80 percent! It's the Pareto Principle before our eyes. Now, what follows is the average score of every writer as a function of number of articles written---in other words, a single point is a single writer, their positions along the x-axis are determined by the number of articles they wrote, and their positions on the y-axis by the average score they gave to albums.
-
-```{r}
-
-#scrap code that i should delete
-
-realpeople <- subset(reviews, author != '')
-
-writers <- aggregate(score ~ author, realpeople, mean)
-
-writers <- update(writers, ~ . + author, table(writers$author))
-
-writers
-
-
-```
 
 
 
@@ -258,6 +301,8 @@ cor.test(writers$score, writers$Freq)
 
 '''stuff here about how this is turning out to be a frequentist's delight. do correlation test for scores under and above the mean and for frequencies below 35 or 40
 
+We can look at individual writers with prolific outputs to see how their scores spread across the spectrum. Here is is the chart for one Amanda Petrusich, who seems nice from Twitter:
+
 ```{r}
 #random frequent writer chosen to plot
 
@@ -267,29 +312,6 @@ ggplot(aes(x = pub_date, y = score),
   geom_smooth(stat = 'smooth', fun.y = 'mean')
 
 ?geom_smooth
-```
-
-
-
-
-Relevant: 
- 
-```{r}
-ggplot(aes(x = pub_year, y =score), data = reviews) +
-  geom_jitter(alpha = 1/10) +
-  geom_smooth(stat = 'summary', fun.y = 'median')
-
-quick <- subset(reviews, genre == 'rock')
-qplot(x= quick$pub_year, y = quick$genre)
-
-```
-
-```{r}
-ggplot(aes(x = pub_date, y = score, label = title), data = subset(reviews, artist == 'radiohead')) +
-  geom_point() +
-  geom_text()
-
-?geom_text
 ```
 
 ##Review Length
@@ -313,30 +335,14 @@ Actually that makes sense given the posthumous date and now I feel bad for swear
 ggplot(aes(x = length, y = score), data = reviews) + 
   geom_point(alpha = 1/15, color = 'blue')+
   scale_y_continuous('Score')+
-  scale_x_continuous('Review Word Count')
-
-
-```
-
-Of course, we don't have to add any single additional statistical layer to this graph or run a single statistical test to instantly see that longer reviews get better scores---we have a nice, logarithmic relationship. But just to perform our due diligence, let's do it anwyay. Here's the same graph overlaid with a line for median:
-
-```{r}
-ggplot(aes(x = length, y = score), data = reviews) + 
-  geom_point(alpha = 1/15, color = 'blue')+
-  scale_y_continuous('Score')+
   scale_x_continuous('Review Word Count')+
   geom_smooth(stat = 'smooth', color = 'Red')
 ```
 
-
-Here are some descriptive stats on the top 20 percent and bottom 20 percent of review scores, respectively:
+It looks like we have found something! Here are some descriptive stats on the top 20 percent and bottom 20 percent of review scores, respectively:
 
 ```{r}
 goodreviews  <- subset(reviews, score >= quantile(score, .80))
-
-head(nicefolk, 10)
-?print
-
 
 summary(goodreviews$length)
 ```
@@ -355,11 +361,12 @@ logscores <- log10(reviews$score)
 
 
 cor.test(reviews$length, reviews$score)
+
+
 ```
 
-In other words, we're dealing with infintesimal probabilities that this relationship is random. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet, which Pitchfork treated with a 0-point review and a nothing more than a .gif of a chimpanzee pissing into its own mouth.
+In other words, there's a correlation. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet, which Pitchfork treated with a 0-point review and a nothing more than a .gif of a chimpanzee pissing into its own mouth.
 
-`subset(reviews, score == 0 & length == 0)`
 
 ```{r, echo = TRUE}
 
@@ -371,13 +378,7 @@ LOL
 
 ##Time of Review
 
-```{r}
-
-ggplot(aes(x = pub_month, y = score), 
-       data = subset(reviews, author == 'adam moerder')) + 
-  geom_point(alpha = 1/5) +
-  geom_smooth(stat = 'smooth', fun.y = 'median')
-```
+Have reviews as a whole gotten more or less generous over time, or do they change depending on which month or where in the month they happen?
 
 
 ```{r}
@@ -402,7 +403,7 @@ year_graph<- ggplot(aes(x = pub_year, y = score), data = reviews) +
 grid.arrange(day_graph, month_graph, year_graph)
 ```
 
-Useless. Next.
+Doesn't seem like it. Next.
 
 ```{r}
 ###LINEAR MODEL PLAYGROUND ## AND OTHER TESTS
@@ -421,16 +422,9 @@ qplot(x = bestmusic$score)
 cor.test(reviews$score, reviews$best_new_music)
 ```
 
+##Artist scores over time
 
-```{r}
-ggplot(aes(y = score, x = length, color = best_new_music), data = reviews) +
-  geom_point(alpha = 1/5)+
-  facet_wrap( ~best_new_music)
-
-subset(bestmusic, score < 6)
-```
-
-FURTHER QUESTIONS: DO BANDS' SCORES GET BETTER OR WORSE OVER TIME?
+One hypothesis is that artists peak and then fall. Let's see if this is obvious just from a graph of artists who have produced 12 or more albums.
 
 ```{r}
 artistnames <- table(reviews$artist)
@@ -442,14 +436,12 @@ reviews <- merge(artistnames.df, reviews, by='artist')
 ggplot(aes(y = score, x = pub_date, color = artist, group = artist),
        data = subset(reviews, albums > 12 & artist != 'various artists')) +
   geom_point() +
-  geom_line(aes(color = artist))
+  geom_line(aes(color = artist), alpha = 1/2)
 
 
 ```
 
-Putting aside nonquantitative points from this graphic, like why there are more than 12 Belle and Sebastian albums in existence or what value a Pitchfork review on Gucci Mane could hold, this is  illegibile and tells us nothing. We can do a few things to fix it. First, we can manipulate our dataframe a bit so that albums are not only ordered by release date, but also by where in the artist's repertoire it came (i.e., first, third, etc.), at least according to when Pitchfork reviewed it. This will allow us to remove lots of empty space on the heat map and make it more clear.
-
-We need to take a sample of our dataset so that we end up with a small number of artists that we can see.
+Nope! Putting aside nonquantitative points from this graphic, like why there are more than 12 Belle and Sebastian albums in existence or what value a Pitchfork review on Gucci Mane could hold, this is  illegibile and tells us nothing. We can do a few things to fix it. First, we can manipulate our dataframe a bit so that albums are not only ordered by release date.
 
 ```{r}
 
@@ -463,23 +455,27 @@ ggplot(aes(score, x = album.number, y = artist, fill = score, group = artist),
   scale_fill_continuous(low = '#0000cc', high = '#ff0000') +
   scale_x_continuous()
 
-rm(reviews.album.numbers)
 
 ```
+
+This is cool, but there's a lot of white space. Let's try looking at artists that have exactly 10 albums.
 
 ```{r}
 ggplot(aes(score, x = album.number, y = artist, fill = score, group = artist),
        data = subset(reviews, albums == 10 & artist != 'various artists')) +
   geom_tile()+
-  scale_fill_continuous(low = '#0000cc', high = '#ff0000') +
-  scale_x_continuous()
+  scale_fill_continuous(low = '#0000cc', high = '#ff0000', name = 'Score') +
+  scale_x_continuous()+
+  xlab('Album Number')+
+  ylab('Artist')
 
 ```
 
+That also looks cool, and yet it's still hard to tell if there's a trend. The right side looks a bit bluer. One thing we can do is see look at some summary statistics of to see if the nth album on average has a lower or higher score than albums that came earlier.
 
 ```{r}
 
-#getting group into on albums by number of albums
+#getting group info on albums by number of albums
 
 
 
@@ -504,26 +500,93 @@ album.numbers.df <- merge(reviews.no.various, album.numbers.df)
 
 ######
 
-album.numbers.mean <- ggplot(aes(x = album.number), data = album.numbers.df)+
+album.numbers.mean <- ggplot(aes(x = album.number, group = 1), data = album.numbers.df)+
   geom_line(aes(y = mean.score), color = 'turquoise') +
-  xlab('Number of Albums')+
+  xlab('Album number')+
   ylab('Mean Score')
 
-album.numbers.std <- ggplot(aes(x = album.number), data = album.numbers.df)+
+album.numbers.std <- ggplot(aes(x = album.number, group = 1), data = album.numbers.df)+
   geom_line(aes(y = std.score), color = 'purple') +
-  xlab('Number of Albums') +
+  xlab('Album number') +
   ylab('Standard Deviation')
 
 album.numbers.freq<- ggplot(aes(x = album.number, y = Freq, group = 1), data = album.numbers.df)+
   geom_line(aes(y = Freq), color = 'brown') +
-  xlab('Number of Albums') +
-  ylab('Frequency')
+  xlab('Album number') +
+  ylab('Frequency(log10)') +
+  coord_trans(y = 'log10')
+
+album.numbers.median <- ggplot(aes(x = album.number, group = 1), data = album.numbers.df)+
+  geom_line(aes(y = median.score), color = 'purple') +
+  xlab('Album number') +
+  ylab('Median score')
   
   
-grid.arrange(album.numbers.mean, album.numbers.std, album.numbers.freq)
+grid.arrange(album.numbers.mean, album.numbers.std, album.numbers.freq, album.numbers.median)
 
 ```
 
+It doesn't look like it, but it's sort of impossible to tell with this. There are so few artists putting out 15+ albums that it's not a decent sample. Plus, this data is arguably too aggregate to draw any meaningful conclusions from. But judging from this sample, 
 
+
+
+```{r}
+ggplot(aes(score, x = album.number, y = artist, fill = rollmean(score, 3, fill = score, align='right'), group = artist), data = subset(reviews, albums == 13 & artist != 'various artists')) +
+  geom_tile()+
+  scale_fill_continuous(low = '#0000cc', high = '#ff0000', name = 'Score') +
+  scale_x_continuous()+
+  xlab('Album Number')+
+  ylab('Artist')
+
+```
+
+It looks like: maybe??? I like to save regression analyses to the end; it forces you to find phenomena clearly visible if in fact they exist. But we've been unable to do that, let's just do a regression analysis and see what comes up.
+
+
+```{r}
+
+#MORE TESTING
+
+test2 <- group_by(reviews, artist, album number)
+
+test <- subset(reviews, album.number == '10')
+
+rollmean(test$score, fill = test$score, 2, align = 'right')
+```
+
+
+
+```{r}
+ggplot(aes(y = rollmean(score, 3, fill = score, align='right'), x = album.number, color = artist, group = 2),
+       data = subset(reviews, albums > 8 & artist != 'various artists')) +
+  geom_point(alpha = 2/3)+
+  guides(color=FALSE)+
+  geom_smooth(method = 'lm', formula = y~x, color = 'purple')+
+  xlab('Album Number')+
+  ylab('Three-score moving average')
+  #geom_line(aes(color = artist), alpha = 1/2)
+  #geom_smooth(stat = 'summary', fun.y = 'median')
+```
+
+This is so horizontal that I actually have to check to make sure I was using the right code. But no, if we actually run the regression formula, we get
+
+```{r}
+lm(reviews$score ~ reviews$album.number)
+```
+
+which means, no, there's nothing to see here, either.
+
+
+#Conclusion
+
+I noticed something while playing with the dataset, and what I love about it is that after all the  analysis and confronation with ggplot and facet-wrapping and tricked out multivariate scatterplots and heat maps that show nearly no measurable correlations, after all the labored deciphering of R's horrible, cryptic documentation, perhaps the sole important insight from an 800 megabyte file of 18,000 rows of data can be gleaned from a single, one-line function of just four words and two numbers, `head(subset(reviews, score == 10), 20)`.
+
+```{r, echo = TRUE}
+head(subset(reviews, score == 10), 20)
+```
+
+Here are just the first 20 of the 76 albums in the set that have a perfect score of 10. Out of 20 albums, all but one of them were written years after the album (or the music on the album if it's an anthology/re-release) was actually released. That's years after the author developed their nostalgia of growing up outside Jersey City listening to the Boss croon, after the album was ushered into the national canon, after the debate over whether this was a Great Work of Art was settled. Ironic---our expedition in data science has taught us that the key lesson is that we don't need to run a single test or plot a single chart to know that nothing is so great a predictor of who gets a 10 than the difference between the release date of the album and the date of the review. And why is that? What is even the point of assigning a score to Blood on the Tracks in 2016? Maybe it's partly signaling, to indicate that an author is aware of just how big and important a thing is, that they have the critical eye to know a 10 when they see it. But this is Pitcfork, where, according to our calculations, the higher the score, the more likely the author will unleash a paean to an album's glory. To dispense  a 10 is to make the sign of the cross, which is why Kanye, a pesonality who has somehow convinced hoardes of critics to scramble to see which one can proclaim his genius the loudest, is one of the few active artists who regularly receives them ###MAYBE IT'S THE FACT THAT THEY WANT TO SAY THEY WERE THE ONES WHO SETTLED THE CULTURAL ARGUMENT IN HIS FAVOR, THAT THEY SEE IT WITHOUT THE BENEFIT OF HINDSIGHT. Tago Mago and Yeezus are now, in the litugry of Pitchfork, sancified with the acknowledgment of perfection. What's the difference between a 7.3 and a 7.4? Nothing; the decimal points exist only to impress that the evauation of popular music is borne out with scientific rigor and outputs exact, objective, non-artificial results---that the arbitrary order imposed on something more or less orderless is in fact not arbitrary at all. But the difference between 9.9 and 10 is the distinction between measurement and worship.
+
+All of which is to say, I think this dataset would benefit by having more data on the difference between publication date and release date, if someone with the web scraping skills were so inclined.
 
 
