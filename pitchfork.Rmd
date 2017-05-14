@@ -531,7 +531,43 @@ It doesn't look like it, but it's sort of impossible to tell with this. There ar
 
 
 ```{r}
-ggplot(aes(score, x = album.number, y = artist, fill = rollmean(score, 3, fill = score, align='right'), group = artist), data = subset(reviews, albums == 13 & artist != 'various artists')) +
+
+#########################################HERE#######################################################
+
+test <- subset(reviews, albums >= 9)
+
+
+test <- group_by(test, artist)
+
+#test$roll.mean <- rollmean(test$score, 3, fill = test$score, align = 'right')
+
+
+test$roll.mean<-ave(test$artist, test$score,
+                         FUN= function(x) rollmean(x, k=3, na.pad=T))
+
+
+library(plyr)
+
+test$roll.mean <- ddply(
+  test, 'artist',
+  transform,
+  roll.mean = rollmean(score, 3, align="right", fill=score, na.pad = FALSE)
+)
+
+
+  
+rollmean(test$score, 3, fill = NA, aligh='right')
+
+require(zoo)
+test$roll.mean<-ave(test$artist, test$score, 
+                         FUN= function(x) rollmean(x, k=3, na.pad=T) )
+
+
+#reviews$rolling.score <-
+ # group_by(artist) %>%
+  #rollmean(score, )
+
+ggplot(aes(score, x = album.number, y = artist, fill = rollmean(score, 3, fill = score, align='right'), group = artist), data = subset(reviews, albums == 10 & artist != 'various artists')) +
   geom_tile()+
   scale_fill_continuous(low = '#0000cc', high = '#ff0000', name = 'Score') +
   scale_x_continuous()+
@@ -540,7 +576,7 @@ ggplot(aes(score, x = album.number, y = artist, fill = rollmean(score, 3, fill =
 
 ```
 
-It looks like: maybe??? I like to save regression analyses to the end; it forces you to find phenomena clearly visible if in fact they exist. But we've been unable to do that, let's just do a regression analysis and see what comes up.
+It looks like: maybe??? I like to save regression analyses to the end; it forces you to find phenomena clearly visible if in fact they exist. But we've been unable to do that, let's just do a regression analysis and see what comes up, wher each color indicates a different artist.
 
 
 ```{r}
@@ -557,7 +593,7 @@ rollmean(test$score, fill = test$score, 2, align = 'right')
 
 
 ```{r}
-ggplot(aes(y = rollmean(score, 3, fill = score, align='right'), x = album.number, color = artist, group = 2),
+ggplot(aes(y = rollmean(score, 3, fill = score, align='right'), x = album.number, color = artist),
        data = subset(reviews, albums > 8 & artist != 'various artists')) +
   geom_point(alpha = 2/3)+
   guides(color=FALSE)+
@@ -585,7 +621,7 @@ I noticed something while playing with the dataset, and what I love about it is 
 head(subset(reviews, score == 10), 20)
 ```
 
-Here are just the first 20 of the 76 albums in the set that have a perfect score of 10. Out of 20 albums, all but one of them were written years after the album (or the music on the album if it's an anthology/re-release) was actually released. That's years after the author developed their nostalgia of growing up outside Jersey City listening to the Boss croon, after the album was ushered into the national canon, after the debate over whether this was a Great Work of Art was settled. Ironic---our expedition in data science has taught us that the key lesson is that we don't need to run a single test or plot a single chart to know that nothing is so great a predictor of who gets a 10 than the difference between the release date of the album and the date of the review. And why is that? What is even the point of assigning a score to Blood on the Tracks in 2016? Maybe it's partly signaling, to indicate that an author is aware of just how big and important a thing is, that they have the critical eye to know a 10 when they see it. But this is Pitcfork, where, according to our calculations, the higher the score, the more likely the author will unleash a paean to an album's glory. To dispense  a 10 is to make the sign of the cross, which is why Kanye, a pesonality who has somehow convinced hoardes of critics to scramble to see which one can proclaim his genius the loudest, is one of the few active artists who regularly receives them ###MAYBE IT'S THE FACT THAT THEY WANT TO SAY THEY WERE THE ONES WHO SETTLED THE CULTURAL ARGUMENT IN HIS FAVOR, THAT THEY SEE IT WITHOUT THE BENEFIT OF HINDSIGHT. Tago Mago and Yeezus are now, in the litugry of Pitchfork, sancified with the acknowledgment of perfection. What's the difference between a 7.3 and a 7.4? Nothing; the decimal points exist only to impress that the evauation of popular music is borne out with scientific rigor and outputs exact, objective, non-artificial results---that the arbitrary order imposed on something more or less orderless is in fact not arbitrary at all. But the difference between 9.9 and 10 is the distinction between measurement and worship.
+Here are just the first 20 of the 76 albums in the set that have a perfect score of 10. Out of 20 albums, all but one of them were written years after the album (or the music on the album if it's an anthology/re-release) was actually released. That's years after the author developed their nostalgia of growing up outside Jersey City listening to the Boss croon, after the album was ushered into the national canon, after the debate over whether this was a Great Work of Art was settled. Ironic---our expedition in data science has taught us that the key lesson is that we don't need to run a single test or plot a single chart to know that nothing is so great a predictor of who gets a 10 than the difference between the release date of the album and the date of the review. And why is that? What is even the point of assigning a score to Blood on the Tracks in 2016? Maybe it's partly signaling, to indicate that an author is aware of just how big and important a thing is, that they have the critical eye to know a 10 when they see it. But this is Pitcfork, where, according to our calculations, the higher the score, the more likely the author will unleash a paean to an album's glory. To dispense  a 10 is to make the sign of the cross, which is why Kanye, a pesonality who has somehow convinced hoardes of critics to scramble to see which one can proclaim his genius the loudest, is one of the few active artists who regularly receives them. Tago Mago and Yeezus are now, in the litugry of Pitchfork, sancified with the acknowledgment of perfection. What's the difference between a 7.3 and a 7.4? Nothing; the decimal points exist only to impress that the evauation of popular music is borne out with scientific rigor and outputs exact, objective, non-artificial results---that the arbitrary order imposed on something more or less orderless is in fact not arbitrary at all. But the difference between 9.9 and 10 is the distinction between measurement and worship.
 
 All of which is to say, I think this dataset would benefit by having more data on the difference between publication date and release date, if someone with the web scraping skills were so inclined.
 
