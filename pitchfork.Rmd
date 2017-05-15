@@ -3,8 +3,9 @@ title: "Analysis of Pitchfork Music Reviews"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
+library(plyr)
 library(ggplot2)
 library(dplyr)
 library(GGally)
@@ -15,6 +16,8 @@ library(lattice)
 library(MASS)
 library(gridExtra)
 library(zoo)
+library(knitr)
+library(rmarkdown)
 
 ```
 
@@ -30,6 +33,13 @@ With that said, let's wind our way through this thing.
 
 ```{r}
 reviews <- read.csv('reviewspandas2.csv', strip.white=TRUE)
+reviews$proportions <-NULL
+reviews$counter <- NULL
+reviews$words <-NULL
+reviews$content <- NULL
+reviews$cleanwords <- NULL
+reviews$X <- NULL
+reviews$Unnamed..0 <- NULL
 
 #content <- read.csv('content.csv')
 #genres <- read.csv('genres.csv')
@@ -56,10 +66,10 @@ Here's a bird's-eye view of our dataset:
 str(reviews)
 ```
 
-This is a reasonably large dataframe. It has 16 #CORRECT THIS rows, and many of the rows have hundreds or thousands of unique values. We'll take summary values of everything but the 'content' column, which gives us very large, very unquantitative criticism.
+This is a reasonably large dataframe. It has 18 rows, and many of the rows have hundreds or thousands of unique values. We'll take summary values of everything but the 'content' column, which gives us very large, very unquantitative criticism.
 
-```{r, echo = false}
-summary(reviewsunique[,2:12, 14:15]) ###FIX THIS
+```{r}
+summary(reviews)
 ```
 
 Already, some points arise:
@@ -84,9 +94,6 @@ Let's take a look at how the scores fall:
 
 qplot(x = reviews$score, xlab = 'Score', ylab = 'Count', binwidth = .1, 
 fill = I('orange'), color = I('black'))
-
-?qplot
-
 ```
 
 
@@ -107,12 +114,13 @@ The fun of the dataset is how many angles it provides to look at scores. Let's s
 
 
 ```{r}
-ggplot(aes(x = genre, y = score, group = 1), data = subset(reviewsunique, genre != '')) +
+ggplot(aes(x = genre, y = score, group = 1), data = subset(reviews, genre != '')) +
   geom_jitter(alpha = 1/10) +
   geom_smooth(stat = 'summary', fun.y = 'median', show.legend = TRUE)+
   xlab('Genre')+
   ylab('Score')
 ```
+
 There doesn't seem to be much prejudice for or against any particular genre in terms of score, although rock predominates in terms of sheer number of albums reviewed.
 
 ```{r}
@@ -245,8 +253,13 @@ This is a histogram of authors based on how many articles they've written:
 ```{r}
 qplot(x = reviews$author, xlab= 'Reviewer', ylab = 'Count')
 ```
+
 So, quite a bit of variation, with some people writing more than 800 reviews and others contributing only one. This is the total number of articles written by the top 20 percent of writers:
+
 ```{r}
+
+realpeople <- subset(reviews, author != '')
+
 topwriters <- table(realpeople$author) 
 
 # create a dataframe from the table:
@@ -263,6 +276,7 @@ writers <- merge(writers, table.df, all = TRUE, by = c('author'))
 #deleting duplicate columns
 writers$Freq.x <- NULL
 writers$Freq.y <- NULL
+
 
 ##looking for pareto-type phenomena
 frequentwriters <- subset(writers, Freq >= quantile(Freq, .8))
@@ -311,7 +325,6 @@ ggplot(aes(x = pub_date, y = score),
   geom_point(alpha = 1/5) +
   geom_smooth(stat = 'smooth', fun.y = 'mean')
 
-?geom_smooth
 ```
 
 ##Review Length
@@ -356,12 +369,7 @@ summary(badreviews$length)
 As we can see, the differences are substantial. If we run a test for correlation on the two variables, we get:
 
 ```{r}
-
-logscores <- log10(reviews$score)
-
-
 cor.test(reviews$length, reviews$score)
-
 
 ```
 
@@ -405,22 +413,6 @@ grid.arrange(day_graph, month_graph, year_graph)
 
 Doesn't seem like it. Next.
 
-```{r}
-###LINEAR MODEL PLAYGROUND ## AND OTHER TESTS
-```
-
-```{r}
-subset(reviews, score == 10)
-```
-
-```{r}
-
-bestmusic <- subset(reviews, best_new_music == 1)
-
-qplot(x = bestmusic$score)
-
-cor.test(reviews$score, reviews$best_new_music)
-```
 
 ##Artist scores over time
 
@@ -441,13 +433,13 @@ ggplot(aes(y = score, x = pub_date, color = artist, group = artist),
 
 ```
 
-Nope! Putting aside nonquantitative points from this graphic, like why there are more than 12 Belle and Sebastian albums in existence or what value a Pitchfork review on Gucci Mane could hold, this is  illegibile and tells us nothing. We can do a few things to fix it. First, we can manipulate our dataframe a bit so that albums are not only ordered by release date.
+Nope! Putting aside nonquantitative points from this graphic, like why there are more than 12 Belle and Sebastian albums in existence or what value a Pitchfork review on Gucci Mane could hold, this is too  illegibile to tell us anything. We can do a few things to fix it. First, we can manipulate our dataframe a bit so that albums are not only ordered by release date, but by where in the sequence of an artist's reptertoire a given album came.
 
 ```{r}
 
 reviews <- reviews[with(reviews, order(artist, pub_date)), ]
 
-reviews$album.number <- sequence(tabulate(reviews.album.numbers$artist))
+reviews$album.number <- sequence(tabulate(reviews$artist))
 
 ggplot(aes(score, x = album.number, y = artist, fill = score, group = artist),
        data = subset(reviews, albums > 11 & artist != 'various artists')) +
@@ -526,7 +518,7 @@ grid.arrange(album.numbers.mean, album.numbers.std, album.numbers.freq, album.nu
 
 ```
 
-It doesn't look like it, but it's sort of impossible to tell with this. There are so few artists putting out 15+ albums that it's not a decent sample. Plus, this data is arguably too aggregate to draw any meaningful conclusions from. But judging from this sample, 
+It doesn't look like it, but it's sort of impossible to tell with this. There are so few artists putting out 15+ albums that it's not a decent sample. Plus, this data is arguably too aggregate to draw any meaningful conclusions from. 
 
 
 
@@ -534,72 +526,60 @@ It doesn't look like it, but it's sort of impossible to tell with this. There ar
 
 #########################################HERE#######################################################
 
+
 test <- subset(reviews, albums >= 9)
 
+# order dataframe by artist then published date
+test <- test[with(test, order( artist, pub_date)), ]
 
-test <- group_by(test, artist)
-
-#test$roll.mean <- rollmean(test$score, 3, fill = test$score, align = 'right')
-
-
-test$roll.mean<-ave(test$artist, test$score,
-                         FUN= function(x) rollmean(x, k=3, na.pad=T))
-
-
-library(plyr)
-
+# creates a dataframe, including MA
 test$roll.mean <- ddply(
   test, 'artist',
   transform,
-  roll.mean = rollmean(score, 3, align="right", fill=score, na.pad = FALSE)
+  roll.mean = rollmean(score, 3, align="right", fill=score, na.pad = TRUE)
 )
 
-
-  
-rollmean(test$score, 3, fill = NA, aligh='right')
-
-require(zoo)
-test$roll.mean<-ave(test$artist, test$score, 
-                         FUN= function(x) rollmean(x, k=3, na.pad=T) )
-
-
-#reviews$rolling.score <-
- # group_by(artist) %>%
-  #rollmean(score, )
-
-ggplot(aes(score, x = album.number, y = artist, fill = rollmean(score, 3, fill = score, align='right'), group = artist), data = subset(reviews, albums == 10 & artist != 'various artists')) +
+ggplot(aes(score, x = album.number, y = artist, fill = roll.mean$roll.mean, group = artist), data = subset(test, artist != 'various artists' & albums == 10)) +
   geom_tile()+
   scale_fill_continuous(low = '#0000cc', high = '#ff0000', name = 'Score') +
-  scale_x_continuous()+
   xlab('Album Number')+
   ylab('Artist')
-
 ```
 
-It looks like: maybe??? I like to save regression analyses to the end; it forces you to find phenomena clearly visible if in fact they exist. But we've been unable to do that, let's just do a regression analysis and see what comes up, wher each color indicates a different artist.
+The first two bars on the X axis are scores for individual albums, and from the third bar onward, the color is the rolling mean of the three albums inclusively. This is just artists who have put out 10 albums. We can also look at artists who have released 9:
+
+```{r}
+ggplot(aes(score, x = album.number, y = artist, fill = roll.mean$roll.mean, group = artist), data = subset(test, artist != 'various artists' & albums == 9)) +
+  geom_tile()+
+  scale_fill_continuous(low = '#0000cc', high = '#ff0000', name = 'Score') +
+  xlab('Album Number')+
+  ylab('Artist')
+```
+
+or 20
+
+```{r}
+ggplot(aes(score, x = album.number, y = artist, fill = roll.mean$roll.mean, group = artist), data = subset(test, artist != 'various artists' & albums == 20)) +
+  geom_tile()+
+  scale_fill_continuous(low = '#0000cc', high = '#ff0000', name = 'Score') +
+  xlab('Album Number')+
+  ylab('Artist')
+```
+
+or however many.
+
+So do albums get worse over time? It looks like, maybe???  I like to save regression analyses to the end; it forces you to find phenomena clearly visible if in fact they exist. But since we've been unable to do that, let's just do a regression analysis and see what comes up, wher each color indicates a different artist.
+
 
 
 ```{r}
-
-#MORE TESTING
-
-test2 <- group_by(reviews, artist, album number)
-
-test <- subset(reviews, album.number == '10')
-
-rollmean(test$score, fill = test$score, 2, align = 'right')
-```
-
-
-
-```{r}
-ggplot(aes(y = rollmean(score, 3, fill = score, align='right'), x = album.number, color = artist),
+ggplot(aes(y = score, x = album.number, color = artist),
        data = subset(reviews, albums > 8 & artist != 'various artists')) +
   geom_point(alpha = 2/3)+
   guides(color=FALSE)+
   geom_smooth(method = 'lm', formula = y~x, color = 'purple')+
   xlab('Album Number')+
-  ylab('Three-score moving average')
+  ylab('Score')
   #geom_line(aes(color = artist), alpha = 1/2)
   #geom_smooth(stat = 'summary', fun.y = 'median')
 ```
@@ -615,7 +595,7 @@ which means, no, there's nothing to see here, either.
 
 #Conclusion
 
-I noticed something while playing with the dataset, and what I love about it is that after all the  analysis and confronation with ggplot and facet-wrapping and tricked out multivariate scatterplots and heat maps that show nearly no measurable correlations, after all the labored deciphering of R's horrible, cryptic documentation, perhaps the sole important insight from an 800 megabyte file of 18,000 rows of data can be gleaned from a single, one-line function of just four words and two numbers, `head(subset(reviews, score == 10), 20)`.
+I noticed something while playing with the dataset, and what I love about it is that after all the  analysis and confronation with ggplot and facet-wrapping and tricked out multivariate scatterplots and heat maps that show nearly no measurable correlations, after all the labored deciphering of R's cryptic, obscurantist documentation, perhaps the sole important insight from an 800 megabyte file of 18,000 rows of data can be gleaned from a single, one-line function of just four words and two numbers,
 
 ```{r, echo = TRUE}
 head(subset(reviews, score == 10), 20)
