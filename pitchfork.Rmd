@@ -5,13 +5,11 @@ output: html_document
 
 ```{r setup, include=FALSE, warning=FALSE, message=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
-library(plyr)
 library(ggplot2)
 library(dplyr)
 library(GGally)
 library(proto)
 library(tidyr)
-library(sqldf)
 library(lattice)
 library(MASS)
 library(gridExtra)
@@ -23,16 +21,18 @@ library(rmarkdown)
 
 # Introduction
 
-Hello! Welcome to an analysis of 18 years of everyone's favorite cool music website, pitchfork.com. This data was generously uploaded by Nolan Conway at Kaggle and can be found at https://www.kaggle.com/nolanbconaway/pitchfork-data. Mr. Conway uploaded the data in a sqlite database; for this project, I parsed the tables into CSVs and merged the relevant ones into a single dataframe.
+Hello! Welcome to an analysis of 18 years of everyone's favorite cool music website, pitchfork.com. This data was generously uploaded by Nolan Conway at Kaggle and can be found at https://www.kaggle.com/nolanbconaway/pitchfork-data. Mr. Conway uploaded the data in a sqlite database, and I parsed the tables into CSVs and merged the relevant ones into a single dataframe.
 
-There's a lot to explore here. Have album scores changed overtime? Do the sages of Pitchfork betray preferences for different genres, artists or labels? Do different classes of writers dole out differnet judgment? And perhaps most interesting, are score ranges associated with different language in the reviews? With more than 18,000 rows in this dataset, we'll soon find out!
+There's a lot to explore here. Have album scores changed overtime? Do the sages of Pitchfork betray preferences for different genres, artists or labels? Do different classes of writers dole out differnet judgment? And so on. With more than 18,000 rows in this dataset, we'll soon find out!
 
-A note on the data: First, some of this was processed in Python, which I think is far more functional than R for splitting strings, getting word counts, running functions in grouped dataframes, and so on. The new columns in this dataset that are not in the original SQLite file are one for the split review contents, one for a counter of each word used in those reviews, and one for the length of each review. Second, the fact that this was originally stored in a SQLite file meant that when the tables were merged into the dataframe, there was a fair number of duplicate rows, as a new row was created if an album had more than one label or genre. That sometimes resulted in single albums containing dozens of rows. (One of Radiohead's album had 32 rows lol.) Thus, there could be a slight loss of resolution when analyses include genres or labels.
+A note on the data:The fact that this was originally stored in a SQLite file meant that when the tables were merged into the dataframe, there was a fair number of duplicate rows, as a new row was created if an album had more than one label or genre. That sometimes resulted in single albums containing dozens of rows. (One of Radiohead's album had 32 rows lol.) Thus, there could be a slight loss of resolution when analyses include genres or labels.
 
-With that said, let's wind our way through this thing.
+With that said, let's begin.
 
 ```{r}
-reviews <- read.csv('reviewspandas2.csv', strip.white=TRUE)
+setwd('~/R/pitchfork')
+getwd()
+reviews <- read.csv('reviews with diversity.csv', strip.white=TRUE)
 reviews$proportions <-NULL
 reviews$counter <- NULL
 reviews$words <-NULL
@@ -66,9 +66,10 @@ Here's a bird's-eye view of our dataset:
 str(reviews)
 ```
 
-This is a reasonably large dataframe. It has 18 rows, and many of the rows have hundreds or thousands of unique values. We'll take summary values of everything but the 'content' column, which gives us very large, very unquantitative criticism.
+This is a reasonably large dataframe. It has 18 columns, and many of the rows have hundreds or thousands of unique values. We'll take summary values of everything but the 'content' column, which gives us very large, very unquantitative criticism.
 
 ```{r}
+reviews$clean <- NULL
 summary(reviews)
 ```
 
@@ -111,8 +112,6 @@ Pitchfork, it seems, grades on a curve---if you release an album, you're likely 
 The fun of the dataset is how many angles it provides to look at scores. Let's start by taking a look at genres.
 
 
-
-
 ```{r}
 ggplot(aes(x = genre, y = score, group = 1), data = subset(reviews, genre != '')) +
   geom_jitter(alpha = 1/10) +
@@ -121,7 +120,7 @@ ggplot(aes(x = genre, y = score, group = 1), data = subset(reviews, genre != '')
   ylab('Score')
 ```
 
-There doesn't seem to be much prejudice for or against any particular genre in terms of score, although rock predominates in terms of sheer number of albums reviewed.
+There doesn't seem to be any conscpicuous prejudice for or against any particular genre in terms of score, just a clear signal that rock predominates in terms of sheer number of albums reviewed. Here's the same info broken down by year:
 
 ```{r}
 ggplot(aes(x = pub_year, y =score), data = subset(reviews, genre != '')) +
@@ -141,8 +140,58 @@ summarize(genrescores,
           mean_scores = mean(score))
 ```
 
+The first time I made a pass at this data, I lazily dismissed the possibility that there was any real distinction in genre scores---the mean scores don't diverge by more than a single standard deviation from one another. But despite the ostensibly small distinctions, they're juuust large enough to warrant some testing. The challenge is that there are more albums of types other than jazz or global by orders of magnitude. But we have the magic of R, a language that makes you cry and beg. We can actually sample the dataset such that we get a number of reviews that are equal to the number of 'global' albums, 144, and run some tests.
 
-There's not much of a distinction here. What I AM curious to look at is how the genres of albums Pitchfork has reviewed has changed over the years. Someone recently remarked to me that Pitchfork has "a pre-woke phase and a woke phase", so I'm wondering if this bears out in the genre allotment.
+```{r}
+
+set.seed(1986)
+count(subset(reviews, genre == 'metal'))
+
+myVars = c('genre', 'score')
+
+jazz <- subset(reviews, genre == 'jazz')[myVars]
+global <- subset(reviews, genre == 'global')[myVars]
+rock <- subset(reviews, genre ==  'rock')[myVars][sample(1:nrow(subset(reviews, genre == 'rock')), 144,
+   replace=FALSE),]
+rap <- subset(reviews, genre ==  'rap')[myVars][sample(1:nrow(subset(reviews, genre == 'rap')), 144,
+   replace=FALSE),]
+electronic <- subset(reviews, genre ==  'electronic')[myVars][sample(1:nrow(subset(reviews, genre == 'electronic')), 144,replace=FALSE),]
+pop <- subset(reviews, genre ==  'pop/r&b')[myVars][sample(1:nrow(subset(reviews, genre == 'pop/r&b')), 144,replace=FALSE),]
+metal <- subset(reviews, genre ==  'metal')[myVars][sample(1:nrow(subset(reviews, genre == 'metal')), 144,replace=FALSE),]
+experimental <- subset(reviews, genre ==  'experimental')[myVars][sample(1:nrow(subset(reviews, genre == 'experimental')), 144,replace=FALSE),]
+country <- subset(reviews, genre ==  'folk/country')[myVars][sample(1:nrow(subset(reviews, genre == 'folk/country')), 144,replace=FALSE),]
+
+testing <- rbind(jazz, global, rap, rock, 
+                 electronic, pop, metal, experimental, country)
+
+testing.numbers <- group_by(testing, genre)
+
+summarize(testing.numbers,
+          median.score = median(score),
+          mean.score = mean(score))
+
+```
+
+These are the descriptive stats of our sample, which, if you look at it, are  close enough to the unsampled data that we can test them comfortably. What do we get?
+
+```{r}
+test <- lm(score ~ genre, testing)
+
+anova(test)
+
+```
+
+I would argue we get a result that is more a critique of statistical testing than of Pitchfork.
+
+The result tells us that certain genres do yield scores whose differences are very statistically significant. We can take a look at them individually:
+
+```{r}
+test
+```
+
+The intercept is what an album would receive if it were theoretically genre-less, pop nets you .32 points less for being pop, jazz .32 points more for being jazz, and so on. The question is how reliable this kind of thing is in this case. Love him or hate him, Nassim Taleb include p-values (like the very low, very significant one above) as inventions of psuedo-experts, and while I'm not even qualified enough to marshall a wholesale dismissal of them (nor do I think would he), it's a good example of how sophisticated tests can place undue weight on a factor that may not be very powerful. That p-value indicates there's a one-in-gajillion chance that the scores weren't influenced be genre, and yet there isn't more than about a half-point difference between them in their influence on outcome.
+
+I would say it's too ambiguous to conclusively determine that there's a distinction here. What I AM curious to look at is how the genres of albums Pitchfork has reviewed has changed over the years. Someone recently remarked to me that Pitchfork has "a pre-woke phase and a woke phase", so I'm wondering if this bears out in the genre allotment.
 
 ```{r}
 
@@ -229,7 +278,7 @@ ggplot(aes(x = pub_year, y = mean_score, color = author_type),
   xlab('Publication Year') +
   geom_line()+
   geom_point(aes(size = count), data=subset(writer_types, author_type != '')) +
-  scale_size(breaks = c(1, 10, 50, 100, 200), labels = c('1-9', '10-49', '50-99', '100-199', '200-' ))
+  scale_size(breaks = c(1, 10, 50, 100, 200), labels = c('1-9', '10-49', '50-99', '100-199', '200+' ))
 
 
 ```
@@ -307,25 +356,10 @@ ggplot(aes(x = Freq, y  = score),
 
 See how quickly the scores regress to the mean? It's the Central Limit Theorem! Recall that the CLT states that over sufficient time, a sample of averages of a data set of any shape will ultimately plot along a normal distribution. This looks pretty normal to me! (Note: this chart excluded the top 5 percent of writers for the sake of scale, but they also fall into the long center of the mean.)
 
-This raises an interesting question for creating a linear model. The more  
-
 ```{r}
 cor.test(writers$score, writers$Freq)
 ```
 
-'''stuff here about how this is turning out to be a frequentist's delight. do correlation test for scores under and above the mean and for frequencies below 35 or 40
-
-We can look at individual writers with prolific outputs to see how their scores spread across the spectrum. Here is is the chart for one Amanda Petrusich, who seems nice from Twitter:
-
-```{r}
-#random frequent writer chosen to plot
-
-ggplot(aes(x = pub_date, y = score), 
-       data = subset(reviews, author == 'amanda petrusich')) + 
-  geom_point(alpha = 1/5) +
-  geom_smooth(stat = 'smooth', fun.y = 'mean')
-
-```
 
 ##Review Length
 
@@ -373,7 +407,7 @@ cor.test(reviews$length, reviews$score)
 
 ```
 
-In other words, there's a correlation. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet, which Pitchfork treated with a 0-point review and a nothing more than a .gif of a chimpanzee pissing into its own mouth.
+In other words, there's a correlation. Logically, this makes sense: A writer will gush about an album s/he has fallen in love with, while a bad album is more likely (though certainly not always) to be quickly dispatched. For example, see that one way down in the bottom left corner? If I recall correctly, that would be faux-leather Top 40 mistress Jet, which Pitchfork treated with a 0-point review and  nothing more than a .gif of a chimpanzee pissing into its own mouth.
 
 
 ```{r, echo = TRUE}
@@ -383,6 +417,14 @@ subset(reviews, score == 0 & length == 0)
 ```
 
 LOL
+
+##Language diversity
+
+One hypotehsis is that just as reviewers are more verbose in their positive reviews, so they might be more florid. So I calculated a simple coefficient for language diversity, which, in notation, looks like this:
+
+{u | u = 1}/{w | w = 1}
+
+In this case, the set of u is the number of unique words in a 
 
 ##Time of Review
 
@@ -525,7 +567,7 @@ It doesn't look like it, but it's sort of impossible to tell with this. There ar
 ```{r}
 
 #########################################HERE#######################################################
-
+library(plyr)
 
 test <- subset(reviews, albums >= 9)
 
